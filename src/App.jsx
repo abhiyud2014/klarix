@@ -210,24 +210,34 @@ async function initDB() {
   alaSQLReady = true;
 }
 
-function executeSQL(sql) {
-  // ── PRODUCTION SWAP POINT ──────────────────────────────────────────────────
-  // Replace this entire function body with:
-  //   const res = await fetch("/api/query", { method:"POST",
-  //     headers:{"Content-Type":"application/json"},
-  //     body: JSON.stringify({ sql }) });
-  //   return res.json();
-  // ──────────────────────────────────────────────────────────────────────────
+async function executeSQL(sql) {
+  // Use Neon PostgreSQL via API endpoint
+  const USE_POSTGRES = !!import.meta.env.VITE_USE_POSTGRES;
+  
+  if (USE_POSTGRES) {
+    try {
+      const res = await fetch("/api/query", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ sql })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Query failed");
+      return data;
+    } catch(e) {
+      throw Object.assign(new Error(e.message), { sql });
+    }
+  }
+  
+  // Fallback: AlaSQL (in-browser)
   let rows;
   try {
     rows = window.alasql(sql);
   } catch(e) {
-    // AlaSQL sometimes throws undefined or non-Error objects — handle all cases
     const raw = e == null ? "Unknown AlaSQL error" : (e.message || String(e) || "AlaSQL internal error");
     const msg = raw.split("\n")[0].slice(0, 200);
     throw Object.assign(new Error(msg), { sql });
   }
-  // AlaSQL can return undefined/null on silent failures
   if (!rows || !Array.isArray(rows)) {
     throw Object.assign(new Error("Query returned no results (AlaSQL returned non-array)"), { sql });
   }
@@ -1021,6 +1031,7 @@ export default function App() {
   const [totalCost, setTotalCost] = useState(0);
   const [totalTokens, setTotalTokens] = useState({in:0,out:0});
   const [dbReady, setDbReady] = useState(false);
+  const USE_POSTGRES = !!import.meta.env.VITE_USE_POSTGRES;
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [exportLoading, setExportLoading] = useState(null);
@@ -1100,7 +1111,13 @@ export default function App() {
     saveChatHistory(history);
   }, [history]);
 
-  useEffect(() => { initDB().then(()=>setDbReady(true)).catch(console.error); },[]);
+  useEffect(() => { 
+    if (USE_POSTGRES) {
+      setDbReady(true); // PostgreSQL always ready
+    } else {
+      initDB().then(()=>setDbReady(true)).catch(console.error);
+    }
+  },[USE_POSTGRES]);
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages,loading]);
   useEffect(() => {
     const handler = e => sendMessage(e.detail);
@@ -1314,7 +1331,7 @@ export default function App() {
                 <div style={{width:7,height:7,borderRadius:"50%",background:dbReady?T.accent2:T.warn,boxShadow:dbReady?`0 0 6px ${T.accent2}`:`0 0 6px ${T.warn}`,animation:dbReady?"none":"pulse 1.5s infinite"}}/>
                 <span style={{fontSize:10,fontWeight:600,color:dbReady?T.accent2:T.warn}}>{dbReady?"Connected":"Loading…"}</span>
               </div>
-              <div style={{fontSize:9,color:T.textFaint,lineHeight:1.6}}>AlaSQL · 4 tables · 46 rows<br/>swap executeSQL() for real DB</div>
+              <div style={{fontSize:9,color:T.textFaint,lineHeight:1.6}}>{USE_POSTGRES?'Neon PostgreSQL · Production':'AlaSQL · 4 tables · 46 rows'}</div>
             </div>
           </SideSection>
 

@@ -78,11 +78,21 @@ npm run preview
 
 ## Database
 
-Currently uses AlaSQL (in-browser SQL engine) with sample data. To connect to a real database:
+### Option 1: AlaSQL (Default - In-Browser)
+Uses AlaSQL with sample data. No setup required.
 
-1. Replace the `executeSQL()` function in `src/App.jsx`
-2. Point it to your backend API endpoint
-3. Update the SCHEMA constant with your actual database schema
+### Option 2: PostgreSQL (Production)
+Connect to Neon PostgreSQL for production use:
+
+1. Create free database at https://neon.tech
+2. Run `database/init.sql` in Neon SQL Editor
+3. Add to `.env`:
+```
+DATABASE_URL=postgresql://user:pass@host/db
+VITE_USE_POSTGRES=true
+```
+
+See [POSTGRES_SETUP.md](POSTGRES_SETUP.md) for detailed instructions.
 
 ## Deployment
 
@@ -90,7 +100,10 @@ Currently uses AlaSQL (in-browser SQL engine) with sample data. To connect to a 
 1. Fork this repository
 2. Connect your GitHub account to Vercel
 3. Import the project
-4. Add environment variable: `VITE_GROQ_API_KEY`
+4. Add environment variables:
+   - `VITE_GROQ_API_KEY` (required)
+   - `DATABASE_URL` (optional - for PostgreSQL)
+   - `VITE_USE_POSTGRES=true` (optional - enables PostgreSQL)
 5. Deploy
 
 ### Netlify
@@ -105,7 +118,7 @@ Currently uses AlaSQL (in-browser SQL engine) with sample data. To connect to a 
 - React 18
 - Vite
 - Groq API (Llama 3.3 70B)
-- AlaSQL (in-browser SQL)
+- AlaSQL (in-browser SQL) / Neon PostgreSQL
 - jsPDF & pptxgenjs (export functionality)
 
 ## License
