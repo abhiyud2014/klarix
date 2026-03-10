@@ -81,7 +81,8 @@ INSERT INTO customers VALUES
 ('C005','Urban Express','North','Gold',310000,2019),
 ('C006','ValueMart','South','Standard',175000,2022),
 ('C007','PremiumPick','West','Gold',265000,2020),
-('C008','EasyBuy Stores','East','Premium',420000,2017);
+('C008','EasyBuy Stores','East','Premium',420000,2017),
+('C009','Global Mart','West','Gold',285000,2023);
 
 INSERT INTO market_share VALUES
 ('KLARix Portfolio','Beverages','North','Q1 2024',18.4),
