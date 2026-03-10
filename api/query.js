@@ -13,14 +13,14 @@ export default async function handler(req, res) {
     }
 
     const sql = neon(process.env.DATABASE_URL);
-    const result = await sql([query]);
+    const result = await sql.query(query);
     
-    if (!result || result.length === 0) {
+    if (!result || !result.rows || result.rows.length === 0) {
       return res.json({ rows: [], headers: [] });
     }
 
-    const headers = Object.keys(result[0]);
-    const rows = result.map(row => headers.map(h => row[h] ?? null));
+    const headers = Object.keys(result.rows[0]);
+    const rows = result.rows.map(row => headers.map(h => row[h] ?? null));
     
     res.json({ rows, headers });
   } catch (error) {
