@@ -1159,7 +1159,7 @@ export default function App() {
       let result, finalSQL=sql, finalIntent=intent, finalAnswer=answer, finalInsight=insight, finalFollowups=followups;
       let retried=false;
       try {
-        result = executeSQL(sql);
+        result = await executeSQL(sql);
       } catch(sqlErr) {
         try {
           setActiveStep(1);
@@ -1170,7 +1170,7 @@ export default function App() {
           totalCost += retryCost;
           totalIn += fix.inputTokens; totalOut += fix.outputTokens;
           setActiveStep(3);
-          result = executeSQL(fix.sql);
+          result = await executeSQL(fix.sql);
           finalSQL = fix.sql; finalIntent = fix.intent; finalAnswer = fix.answer||''; finalInsight = fix.insight||''; finalFollowups = fix.followups;
           retried = true;
         } catch(retryErr) {
