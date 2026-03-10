@@ -70,6 +70,7 @@ function findSimilarQuestion(question, threshold = 0.7) {
   return null;
 }
 // ─── PRICING ──────────────────────────────────────────────────────────────────
+const MODELS = {
   "llama-3.3-70b-versatile": {name:"Llama 3.3 70B", priceIn:0.59, priceOut:0.79, maxTokens:8000},
   "openai/gpt-oss-120b": {name:"GPT OSS 120B", priceIn:0.59, priceOut:0.79, maxTokens:8000}
 };
