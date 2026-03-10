@@ -4,7 +4,9 @@ A full-featured Text-to-SQL application powered by Claude AI that converts natur
 
 ## 🚀 Live Demo
 
-Deploy this app instantly:
+**Try it now:** [https://klarix.vercel.app/](https://klarix.vercel.app/)
+
+Deploy your own instance:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/abhiyud2014/klarix)
 
