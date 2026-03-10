@@ -33,12 +33,21 @@ export default async function handler(req, res) {
     
     const session = sessions[0];
     
+    const parsedMessages = messages.map(m => {
+      try {
+        return typeof m.result_data === 'string' ? JSON.parse(m.result_data) : m.result_data;
+      } catch(e) {
+        console.error('Failed to parse message:', e);
+        return null;
+      }
+    }).filter(m => m !== null);
+    
     res.json({
       id: session.id,
       title: session.title,
       totalCost: parseFloat(session.total_cost),
       totalTokens: { in: session.total_tokens_in, out: session.total_tokens_out },
-      messages: messages.map(m => JSON.parse(m.result_data))
+      messages: parsedMessages
     });
   } catch (error) {
     console.error('Load chat error:', error);

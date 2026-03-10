@@ -1117,17 +1117,26 @@ export default function App() {
     if (import.meta.env.VITE_USE_POSTGRES === 'true') {
       try {
         const res = await fetch(`/api/load-chat?id=${conv.id}`);
+        if (!res.ok) throw new Error('Failed to load chat');
         const data = await res.json();
-        setMessages(data.messages);
-        setTotalCost(data.totalCost);
-        setTotalTokens(data.totalTokens);
+        if (!data.messages || data.messages.length === 0) {
+          console.warn('No messages in chat');
+          setMessages([WELCOME_MSG]);
+        } else {
+          setMessages(data.messages);
+        }
+        setTotalCost(data.totalCost || 0);
+        setTotalTokens(data.totalTokens || {in:0,out:0});
       } catch(e) {
         console.error('Load chat failed:', e);
+        setMessages([WELCOME_MSG]);
+        setTotalCost(0);
+        setTotalTokens({in:0,out:0});
       }
     } else {
-      setMessages(conv.messages);
-      setTotalCost(conv.totalCost);
-      setTotalTokens(conv.totalTokens);
+      setMessages(conv.messages || [WELCOME_MSG]);
+      setTotalCost(conv.totalCost || 0);
+      setTotalTokens(conv.totalTokens || {in:0,out:0});
     }
     setActiveHistoryId(conv.id);
     setInput(""); setSelectMode(false); setSelected(new Set()); setExportErr(null); setActiveStep(null);
