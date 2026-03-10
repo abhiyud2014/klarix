@@ -18,23 +18,47 @@ function calculateSimilarity(str1, str2) {
   return union.size > 0 ? intersection.size / union.size : 0;
 }
 
-// Load chat history from localStorage
-function loadChatHistory() {
+// Load chat history from database
+async function loadChatHistory() {
+  if (import.meta.env.VITE_USE_POSTGRES !== 'true') {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch(e) {
+      return [];
+    }
+  }
+  
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const res = await fetch('/api/load-history');
+    if (!res.ok) return [];
+    return await res.json();
   } catch(e) {
     console.warn('Failed to load chat history:', e);
     return [];
   }
 }
 
-// Save chat history to localStorage
-function saveChatHistory(history) {
+// Save chat history to database
+async function saveChatHistory(title, messages, totalCost, totalTokens) {
+  if (import.meta.env.VITE_USE_POSTGRES !== 'true') {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const history = stored ? JSON.parse(stored) : [];
+      history.unshift({ id: Date.now(), title, messages, totalCost, totalTokens, time: new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'}), date: new Date().toLocaleDateString('en-GB', {day:'numeric',month:'short'}) });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, 50)));
+    } catch(e) {}
+    return;
+  }
+  
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, 50))); // Keep max 50 chats
+    await fetch('/api/save-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, messages, totalCost, totalTokens })
+    });
   } catch(e) {
-    console.warn('Failed to save chat history:', e);
+    console.warn('Failed to save chat:', e);
   }
 }
 
@@ -1047,8 +1071,13 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState("llama-3.3-70b-versatile");
   const [exportErr, setExportErr] = useState(null);
   const [activeTable, setActiveTable] = useState(null);
-  const [history, setHistory] = useState(loadChatHistory());
-  const [activeHistoryId, setActiveHistoryId] = useState(null);  // which history item is loaded
+  const [history, setHistory] = useState([]);
+  const [activeHistoryId, setActiveHistoryId] = useState(null);
+  
+  // Load history on mount
+  useEffect(() => {
+    loadChatHistory().then(setHistory);
+  }, []);  // which history item is loaded
   const [collapsed, setCollapsed] = useState({pipeline:false,db:false,tables:false,schema:true,cost:false,history:false});
   const [similarQuestion, setSimilarQuestion] = useState(null);
   const bottomRef = useRef(null);
@@ -1071,17 +1100,12 @@ export default function App() {
     };
   };
 
-  const startNewChat = () => {
-    // Save current chat to history (only if it has Q&A and isn't already a loaded history item)
+  const startNewChat = async () => {
     const snap = snapshotCurrent(messages, totalCost, totalTokens);
-    if (snap) {
-      setHistory(h => {
-        // If this is a loaded history item, update it in place; otherwise prepend
-        if (activeHistoryId) {
-          return h.map(c => c.id===activeHistoryId ? {...snap, id:activeHistoryId} : c);
-        }
-        return [snap, ...h].slice(0, 20);
-      });
+    if (snap && import.meta.env.VITE_USE_POSTGRES === 'true') {
+      await saveChatHistory(snap.title, snap.messages, snap.totalCost, snap.totalTokens);
+      const newHistory = await loadChatHistory();
+      setHistory(newHistory);
     }
     setMessages([WELCOME_MSG]);
     setInput(""); setSelectMode(false); setSelected(new Set());
@@ -1089,35 +1113,49 @@ export default function App() {
     setExportErr(null); setActiveStep(null); setActiveHistoryId(null);
   };
 
-  const loadChat = (conv) => {
-    // Save current chat first (if it has Q&A and is different from what we're loading)
-    if (conv.id !== activeHistoryId) {
-      const snap = snapshotCurrent(messages, totalCost, totalTokens);
-      if (snap) {
-        setHistory(h => {
-          if (activeHistoryId) {
-            return h.map(c => c.id===activeHistoryId ? {...snap, id:activeHistoryId} : c);
-          }
-          return [snap, ...h].slice(0, 20);
-        });
+  const loadChat = async (conv) => {
+    if (import.meta.env.VITE_USE_POSTGRES === 'true') {
+      try {
+        const res = await fetch(`/api/load-chat?id=${conv.id}`);
+        const data = await res.json();
+        setMessages(data.messages);
+        setTotalCost(data.totalCost);
+        setTotalTokens(data.totalTokens);
+      } catch(e) {
+        console.error('Load chat failed:', e);
       }
+    } else {
+      setMessages(conv.messages);
+      setTotalCost(conv.totalCost);
+      setTotalTokens(conv.totalTokens);
     }
-    setMessages(conv.messages);
-    setTotalCost(conv.totalCost);
-    setTotalTokens(conv.totalTokens);
     setActiveHistoryId(conv.id);
     setInput(""); setSelectMode(false); setSelected(new Set()); setExportErr(null); setActiveStep(null);
   };
 
-  const deleteHistory = (id, e) => {
+  const deleteHistory = async (id, e) => {
     e.stopPropagation();
-    setHistory(h => h.filter(c => c.id !== id));
+    if (import.meta.env.VITE_USE_POSTGRES === 'true') {
+      try {
+        await fetch(`/api/delete-chat?id=${id}`, { method: 'DELETE' });
+        const newHistory = await loadChatHistory();
+        setHistory(newHistory);
+      } catch(e) {
+        console.error('Delete failed:', e);
+      }
+    } else {
+      setHistory(h => h.filter(c => c.id !== id));
+    }
     if (activeHistoryId === id) setActiveHistoryId(null);
   };
 
-  // Save history to localStorage whenever it changes
+  // Save history when it changes (localStorage only)
   useEffect(() => {
-    saveChatHistory(history);
+    if (import.meta.env.VITE_USE_POSTGRES !== 'true') {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, 50)));
+      } catch(e) {}
+    }
   }, [history]);
 
   useEffect(() => { 
