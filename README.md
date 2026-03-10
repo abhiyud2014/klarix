@@ -2,6 +2,14 @@
 
 A full-featured Text-to-SQL application powered by Claude AI that converts natural language questions into SQL queries and visualizes results.
 
+## 🚀 Live Demo
+
+Deploy this app instantly:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/abhiyud2014/klarix)
+
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/abhiyud2014/klarix)
+
 ## Features
 
 - 🤖 Natural language to SQL conversion using Claude Sonnet 4
@@ -16,23 +24,29 @@ A full-featured Text-to-SQL application powered by Claude AI that converts natur
 
 - Node.js (v16 or higher)
 - npm or yarn
-- Anthropic API key
+- Groq API key
 
 ## Setup
 
-1. Install dependencies:
+1. Clone the repository:
+```bash
+git clone https://github.com/abhiyud2014/klarix.git
+cd klarix
+```
+
+2. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Configure API key:
+3. Configure API key:
    - Copy `.env.example` to `.env`
-   - Add your Anthropic API key:
+   - Add your Groq API key:
 ```
-VITE_ANTHROPIC_API_KEY=your_actual_api_key_here
+VITE_GROQ_API_KEY=your_actual_groq_api_key_here
 ```
 
-Get your API key from: https://console.anthropic.com/
+Get your API key from: https://console.groq.com/
 
 ## Run the Application
 
@@ -68,11 +82,27 @@ Currently uses AlaSQL (in-browser SQL engine) with sample data. To connect to a 
 2. Point it to your backend API endpoint
 3. Update the SCHEMA constant with your actual database schema
 
+## Deployment
+
+### Vercel
+1. Fork this repository
+2. Connect your GitHub account to Vercel
+3. Import the project
+4. Add environment variable: `VITE_GROQ_API_KEY`
+5. Deploy
+
+### Netlify
+1. Fork this repository
+2. Connect your GitHub account to Netlify
+3. Import the project
+4. Add environment variable: `VITE_GROQ_API_KEY`
+5. Deploy
+
 ## Tech Stack
 
 - React 18
 - Vite
-- Claude Sonnet 4 (Anthropic API)
+- Groq API (Llama 3.3 70B)
 - AlaSQL (in-browser SQL)
 - jsPDF & pptxgenjs (export functionality)
 
