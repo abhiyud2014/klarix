@@ -213,9 +213,12 @@ async function initDB() {
 
 async function executeSQL(sql) {
   // Use Neon PostgreSQL via API endpoint
-  const USE_POSTGRES = !!import.meta.env.VITE_USE_POSTGRES;
+  const USE_POSTGRES = import.meta.env.VITE_USE_POSTGRES === 'true';
+  
+  console.log('USE_POSTGRES:', USE_POSTGRES, 'VITE_USE_POSTGRES:', import.meta.env.VITE_USE_POSTGRES);
   
   if (USE_POSTGRES) {
+    console.log('Using PostgreSQL API');
     try {
       const res = await fetch("/api/query", {
         method: "POST",
@@ -224,12 +227,15 @@ async function executeSQL(sql) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Query failed");
+      console.log('PostgreSQL result:', data);
       return data;
     } catch(e) {
+      console.error('PostgreSQL error:', e);
       throw Object.assign(new Error(e.message), { sql });
     }
   }
   
+  console.log('Using AlaSQL fallback');
   // Fallback: AlaSQL (in-browser)
   let rows;
   try {
@@ -1032,7 +1038,9 @@ export default function App() {
   const [totalCost, setTotalCost] = useState(0);
   const [totalTokens, setTotalTokens] = useState({in:0,out:0});
   const [dbReady, setDbReady] = useState(false);
-  const USE_POSTGRES = !!import.meta.env.VITE_USE_POSTGRES;
+  const USE_POSTGRES = import.meta.env.VITE_USE_POSTGRES === 'true';
+  
+  console.log('App USE_POSTGRES:', USE_POSTGRES, 'Raw value:', import.meta.env.VITE_USE_POSTGRES);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [exportLoading, setExportLoading] = useState(null);
