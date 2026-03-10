@@ -4,8 +4,72 @@ import { useState, useRef, useEffect, createContext, useContext } from "react";
 const ThemeCtx = createContext({});
 const useTheme = () => useContext(ThemeCtx);
 
+// ─── PERSISTENT STORAGE ──────────────────────────────────────────────────────
+const STORAGE_KEY = 'klarix_chat_history';
+const QA_STORAGE_KEY = 'klarix_qa_pairs';
+
+// Simple semantic similarity using word overlap and Jaccard similarity
+function calculateSimilarity(str1, str2) {
+  const normalize = (str) => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+  const words1 = new Set(normalize(str1));
+  const words2 = new Set(normalize(str2));
+  const intersection = new Set([...words1].filter(w => words2.has(w)));
+  const union = new Set([...words1, ...words2]);
+  return union.size > 0 ? intersection.size / union.size : 0;
+}
+
+// Load chat history from localStorage
+function loadChatHistory() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch(e) {
+    console.warn('Failed to load chat history:', e);
+    return [];
+  }
+}
+
+// Save chat history to localStorage
+function saveChatHistory(history) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, 50))); // Keep max 50 chats
+  } catch(e) {
+    console.warn('Failed to save chat history:', e);
+  }
+}
+
+// Load Q&A pairs from localStorage
+function loadQAPairs() {
+  try {
+    const stored = localStorage.getItem(QA_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch(e) {
+    console.warn('Failed to load Q&A pairs:', e);
+    return [];
+  }
+}
+
+// Save Q&A pairs to localStorage
+function saveQAPairs(pairs) {
+  try {
+    localStorage.setItem(QA_STORAGE_KEY, JSON.stringify(pairs.slice(0, 200))); // Keep max 200 Q&As
+  } catch(e) {
+    console.warn('Failed to save Q&A pairs:', e);
+  }
+}
+
+// Find similar questions in history
+function findSimilarQuestion(question, threshold = 0.7) {
+  const qaPairs = loadQAPairs();
+  for (const qa of qaPairs) {
+    const similarity = calculateSimilarity(question, qa.question);
+    if (similarity >= threshold) {
+      return { ...qa, similarity };
+    }
+  }
+  return null;
+}
 // ─── PRICING ──────────────────────────────────────────────────────────────────
-const MODELS = {
   "llama-3.3-70b-versatile": {name:"Llama 3.3 70B", priceIn:0.59, priceOut:0.79, maxTokens:8000},
   "openai/gpt-oss-120b": {name:"GPT OSS 120B", priceIn:0.59, priceOut:0.79, maxTokens:8000}
 };
@@ -928,9 +992,10 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState("llama-3.3-70b-versatile");
   const [exportErr, setExportErr] = useState(null);
   const [activeTable, setActiveTable] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(loadChatHistory());
   const [activeHistoryId, setActiveHistoryId] = useState(null);  // which history item is loaded
   const [collapsed, setCollapsed] = useState({pipeline:false,db:false,tables:false,schema:true,cost:false,history:false});
+  const [similarQuestion, setSimilarQuestion] = useState(null);
   const bottomRef = useRef(null);
 
   const toggleSection = key => setCollapsed(c=>({...c,[key]:!c[key]}));
@@ -995,6 +1060,11 @@ export default function App() {
     if (activeHistoryId === id) setActiveHistoryId(null);
   };
 
+  // Save history to localStorage whenever it changes
+  useEffect(() => {
+    saveChatHistory(history);
+  }, [history]);
+
   useEffect(() => { initDB().then(()=>setDbReady(true)).catch(console.error); },[]);
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages,loading]);
   useEffect(() => {
@@ -1009,9 +1079,20 @@ export default function App() {
       qaPairs.push({question:messages[i].content, ...messages[i+1], pairIdx:qaPairs.length});
   }
 
-  const sendMessage = async (text) => {
+  const sendMessage = async (text, forceNew = false) => {
     const q = (text||input).trim();
     if (!q||loading||!dbReady) return;
+    
+    // Check for similar questions unless forced to generate new
+    if (!forceNew) {
+      const similar = findSimilarQuestion(q);
+      if (similar) {
+        setSimilarQuestion({...similar, newQuestion: q});
+        return;
+      }
+    }
+    
+    setSimilarQuestion(null);
     setInput(""); setExportErr(null);
     setMessages(m=>[...m,{role:"user",content:q}]);
     setLoading(true);
@@ -1046,13 +1127,31 @@ export default function App() {
         }
       }
       setActiveStep(4);
-      setMessages(m=>[...m,{role:"assistant",type:"result",sql:finalSQL,intent:finalIntent,answer:finalAnswer,insight:finalInsight,result,cost:totalCost,inputTokens:totalIn,outputTokens:totalOut,followups:finalFollowups,retried}]);
+      const newQA = {question:q,sql:finalSQL,intent:finalIntent,answer:finalAnswer,insight:finalInsight,result,cost:totalCost,inputTokens:totalIn,outputTokens:totalOut,followups:finalFollowups,retried,timestamp:Date.now()};
+      setMessages(m=>[...m,{role:"assistant",type:"result",...newQA}]);
+      
+      // Save Q&A pair to persistent storage
+      const qaPairs = loadQAPairs();
+      qaPairs.unshift(newQA);
+      saveQAPairs(qaPairs);
     } catch(e) {
       setMessages(m=>[...m,{role:"assistant",type:"error",content:e?.message||String(e),sql:null}]);
     }
     setLoading(false); setActiveStep(null);
   };
 
+  const useSimilarResponse = () => {
+    const q = similarQuestion.newQuestion;
+    setMessages(m=>[...m,{role:"user",content:q},{role:"assistant",type:"result",...similarQuestion,reused:true}]);
+    setSimilarQuestion(null);
+    setInput("");
+  };
+
+  const generateNewResponse = () => {
+    const q = similarQuestion.newQuestion;
+    setSimilarQuestion(null);
+    sendMessage(q, true); // Force new generation
+  };
   const canSend = input.trim() && !loading && dbReady;
   const tblColors = ["#4f8ef7","#10d9a0","#f59e0b","#f472b6"];
 
@@ -1307,6 +1406,22 @@ export default function App() {
             </div>
           )}
 
+          {/* Similar question dialog */}
+          {similarQuestion&&(
+            <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+              <div style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:12,padding:"20px",maxWidth:500,margin:20,boxShadow:T.shadow}}>
+                <h3 style={{margin:"0 0 12px",fontSize:14,fontWeight:700,color:T.text}}>Similar Question Found</h3>
+                <p style={{margin:"0 0 8px",fontSize:12,color:T.textSub}}>Your question: <strong>"{similarQuestion.newQuestion}"</strong></p>
+                <p style={{margin:"0 0 16px",fontSize:12,color:T.textSub}}>Similar previous question: <strong>"{similarQuestion.question}"</strong></p>
+                <p style={{margin:"0 0 16px",fontSize:11,color:T.textMuted}}>Similarity: {Math.round(similarQuestion.similarity * 100)}% • Save ${similarQuestion.cost?.toFixed(5) || '0.00300'} by reusing</p>
+                <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                  <button onClick={useSimilarResponse} style={{padding:"8px 16px",background:T.accent2,border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>Use Previous Answer</button>
+                  <button onClick={generateNewResponse} style={{padding:"8px 16px",background:T.accent,border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>Generate New</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Messages */}
           <div style={{flex:1,overflowY:"auto",padding:"24px",display:"flex",flexDirection:"column",gap:20}}>
 
@@ -1520,6 +1635,7 @@ function ResultCard({p, T}) {
               <span style={{color:T.textMuted}}>{p.outputTokens?.toLocaleString()} sql out</span>
               <span style={{color:T.border}}>·</span>
               <span style={{color:T.accent,fontWeight:700}}>${p.cost.toFixed(5)}</span>
+              {p.reused&&<span style={{color:T.accent2,fontWeight:700}}>• REUSED</span>}
             </div>
             <span style={{fontSize:9,fontWeight:600,color:T.accent2,letterSpacing:".08em"}}>✓ DATA NEVER SENT TO LLM</span>
           </div>
