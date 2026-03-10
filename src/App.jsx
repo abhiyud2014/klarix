@@ -1143,7 +1143,23 @@ export default function App() {
 
   const useSimilarResponse = () => {
     const q = similarQuestion.newQuestion;
-    setMessages(m=>[...m,{role:"user",content:q},{role:"assistant",type:"result",...similarQuestion,reused:true}]);
+    const responseData = {
+      role: "assistant",
+      type: "result",
+      question: q,
+      sql: similarQuestion.sql,
+      intent: similarQuestion.intent,
+      answer: similarQuestion.answer,
+      insight: similarQuestion.insight,
+      result: similarQuestion.result,
+      cost: similarQuestion.cost,
+      inputTokens: similarQuestion.inputTokens,
+      outputTokens: similarQuestion.outputTokens,
+      followups: similarQuestion.followups,
+      retried: similarQuestion.retried,
+      reused: true
+    };
+    setMessages(m=>[...m,{role:"user",content:q}, responseData]);
     setSimilarQuestion(null);
     setInput("");
   };
