@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     }
 
     const sql = neon(process.env.DATABASE_URL);
-    const result = await sql(query);
+    const result = await sql([query]);
     
     if (!result || result.length === 0) {
       return res.json({ rows: [], headers: [] });
