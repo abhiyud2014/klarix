@@ -174,6 +174,7 @@ const DB_ROWS = {
     {customer_id:"C006",name:"ValueMart",region:"South",tier:"Standard",annual_spend:175000,acquisition_year:2022},
     {customer_id:"C007",name:"PremiumPick",region:"West",tier:"Gold",annual_spend:265000,acquisition_year:2020},
     {customer_id:"C008",name:"EasyBuy Stores",region:"East",tier:"Premium",annual_spend:420000,acquisition_year:2017},
+    {customer_id:"C009",name:"Global Mart",region:"West",tier:"Gold",annual_spend:285000,acquisition_year:2023},
   ],
   market_share: [
     {brand:"KLARix Portfolio",category:"Beverages",region:"North",quarter:"Q1 2024",share_pct:18.4},
