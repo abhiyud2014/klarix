@@ -280,12 +280,46 @@ Return ONLY JSON: {"sql":"SELECT ...","intent":"what this simplified query does"
 
 // ─── LLM: schema-only call → returns SQL ─────────────────────────────────────
 async function askLLM(question, model, retryCount = 0) {
+  // Client-side filter for obvious non-data inputs
+  const lowerQ = question.toLowerCase().trim();
+  const greetings = ['hi','hello','hey','good morning','good evening','good afternoon','greetings','howdy','sup','yo'];
+  const social = ['how are you','whats up','what\'s up','thank you','thanks','bye','goodbye','see you'];
+  const aboutBot = ['who are you','what can you do','help me','introduce yourself','what are you','your name'];
+  
+  const isNonData = greetings.some(g => lowerQ === g || lowerQ.startsWith(g + ' ') || lowerQ.endsWith(' ' + g)) ||
+                    social.some(s => lowerQ.includes(s)) ||
+                    aboutBot.some(a => lowerQ.includes(a));
+  
+  if (isNonData) {
+    return {
+      sql: null,
+      intent: "Not a data question",
+      answer: "Hello! I'm KLARix, your AI data analyst. I can help you analyze data from our database. Try asking about products, sales, customers, or market share.",
+      insight: "",
+      followups: ["What are the top 5 products by revenue?","Show me sales by region and channel","Which customers are Premium tier?"],
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+  }
+  
   try {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${import.meta.env.VITE_GROQ_API_KEY}`},
       body: JSON.stringify({
         model, max_tokens:600,
-        messages:[{role:"system",content:`You are a SQL expert writing queries for AlaSQL (an in-browser SQL engine with limitations).
+        messages:[{role:"system",content:`CRITICAL INSTRUCTION: First, determine if the user's input is a DATA QUESTION or NON-DATA INPUT.
+
+NON-DATA INPUTS (you MUST return sql:null):
+- Greetings: hi, hello, hey, good morning, good evening, etc.
+- Social: how are you, what's up, thank you, thanks, bye, goodbye
+- About you: who are you, what can you do, help, introduce yourself
+- Irrelevant: weather, sports, news, jokes, personal topics
+- Anything NOT about: products, sales, customers, market_share tables
+
+For NON-DATA inputs, return EXACTLY:
+{"sql":null,"intent":"Not a data question","answer":"Hello! I'm KLARix, your AI data analyst. I can help you analyze data from our database. Try asking: 'What are the top products by revenue?' or 'Show me sales by region.'","insight":"","followups":["What are the top 5 products by revenue?","Show me sales by region and channel","Which customers are Premium tier?"]}
+
+ONLY if the question is about products, sales, customers, or market_share data, then generate SQL.
 
 SCHEMA:
 ${SCHEMA}
@@ -1127,7 +1161,11 @@ export default function App() {
           setLoading(false); setActiveStep(null); return;
         }
       }
-      setActiveStep(4);
+      // Handle non-SQL responses (greetings, irrelevant questions)
+      if (!finalSQL) {
+        setMessages(m=>[...m,{role:"assistant",type:"chat",intent:finalIntent,answer:finalAnswer,followups:finalFollowups,cost:totalCost,inputTokens:totalIn,outputTokens:totalOut}]);
+        setLoading(false); setActiveStep(null); return;
+      }
       const newQA = {question:q,sql:finalSQL,intent:finalIntent,answer:finalAnswer,insight:finalInsight,result,cost:totalCost,inputTokens:totalIn,outputTokens:totalOut,followups:finalFollowups,retried,timestamp:Date.now()};
       setMessages(m=>[...m,{role:"assistant",type:"result",...newQA}]);
       
@@ -1495,6 +1533,7 @@ export default function App() {
 
                     {/* AI response */}
                     {p.type==="result"&&<ResultCard p={p} T={T}/>}
+                    {p.type==="chat"&&<ChatCard p={p} T={T}/>}
                     {p.type==="error"&&(
                       <div style={{display:"flex",gap:12}}>
                         <KLARixAvatar T={T}/>
@@ -1583,6 +1622,44 @@ export default function App() {
 function KLARixAvatar({T}) {
   return (
     <div style={{width:32,height:32,borderRadius:9,background:`linear-gradient(135deg,${T.accent},${T.accent2})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",flexShrink:0,marginTop:4,boxShadow:`0 0 12px ${T.accentGlow}`}}>K</div>
+  );
+}
+
+// ─── CHAT CARD (for non-SQL responses) ──────────────────────────────────────
+function ChatCard({p, T}) {
+  return (
+    <div style={{display:"flex",gap:12,animation:"fadeUp .3s ease"}}>
+      <KLARixAvatar T={T}/>
+      <div style={{flex:1,display:"flex",flexDirection:"column",gap:10,minWidth:0}}>
+        <div style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px",boxShadow:T.shadow}}>
+          <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,margin:"0 0 10px"}}>{p.answer}</p>
+        </div>
+        {p.cost!=null&&(
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"4px 12px",background:T.bgDeep,border:`1px solid ${T.border}`,borderRadius:20,fontSize:9,fontWeight:500}}>
+            <span style={{color:T.accent2}}>💬</span>
+            <span style={{color:T.textMuted}}>{p.inputTokens?.toLocaleString()} tokens in</span>
+            <span style={{color:T.border}}>·</span>
+            <span style={{color:T.textMuted}}>{p.outputTokens?.toLocaleString()} tokens out</span>
+            <span style={{color:T.border}}>·</span>
+            <span style={{color:T.accent,fontWeight:700}}>${p.cost.toFixed(5)}</span>
+          </div>
+        )}
+        {p.followups?.length>0&&(
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            <div style={{fontSize:9,fontWeight:700,color:T.textFaint,letterSpacing:".14em",marginBottom:2}}>SUGGESTED QUESTIONS</div>
+            {p.followups.map((q,i)=>(
+              <button key={i} className="fup-btn"
+                onClick={()=>document.dispatchEvent(new CustomEvent("klarix-followup",{detail:q,bubbles:true}))}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",textAlign:"left",fontSize:12,color:T.textSub,fontFamily:"inherit",width:"100%",lineHeight:1.5}}>
+                <span style={{fontSize:16,color:T.accent,fontWeight:300,flexShrink:0,lineHeight:1}}>›</span>
+                <span style={{flex:1}}>{q}</span>
+                <span style={{fontSize:10,color:T.textFaint,flexShrink:0}}>Ask →</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
