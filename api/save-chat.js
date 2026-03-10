@@ -27,7 +27,7 @@ export default async function handler(req, res) {
           ${msg.type || null},
           ${msg.content || null},
           ${msg.sql || null},
-          ${msg.result ? JSON.stringify(msg.result) : null}
+          ${JSON.stringify(msg)}
         )
       `;
     }

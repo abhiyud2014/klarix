@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     }
     
     const messages = await sql`
-      SELECT role, type, content, sql_query, result_data
+      SELECT result_data
       FROM chat_messages
       WHERE session_id = ${parseInt(id)}
       ORDER BY created_at ASC
@@ -38,13 +38,7 @@ export default async function handler(req, res) {
       title: session.title,
       totalCost: parseFloat(session.total_cost),
       totalTokens: { in: session.total_tokens_in, out: session.total_tokens_out },
-      messages: messages.map(m => ({
-        role: m.role,
-        type: m.type,
-        content: m.content,
-        sql: m.sql_query,
-        result: m.result_data ? JSON.parse(m.result_data) : null
-      }))
+      messages: messages.map(m => JSON.parse(m.result_data))
     });
   } catch (error) {
     console.error('Load chat error:', error);
