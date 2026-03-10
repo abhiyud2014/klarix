@@ -7,8 +7,7 @@ const useTheme = () => useContext(ThemeCtx);
 // ─── PRICING ──────────────────────────────────────────────────────────────────
 const MODELS = {
   "llama-3.3-70b-versatile": {name:"Llama 3.3 70B", priceIn:0.59, priceOut:0.79, maxTokens:8000},
-  "openai/gpt-oss-120b": {name:"GPT OSS 120B", priceIn:0.59, priceOut:0.79, maxTokens:8000},
-  "qwen/qwen3-32b": {name:"Qwen 3 32B", priceIn:0.59, priceOut:0.79, maxTokens:4096}
+  "openai/gpt-oss-120b": {name:"GPT OSS 120B", priceIn:0.59, priceOut:0.79, maxTokens:8000}
 };
 const calcCost = (i,o,model) => {
   const m = MODELS[model] || MODELS["llama-3.3-70b-versatile"];
@@ -215,12 +214,13 @@ Return ONLY JSON: {"sql":"SELECT ...","intent":"what this simplified query does"
 }
 
 // ─── LLM: schema-only call → returns SQL ─────────────────────────────────────
-async function askLLM(question, model) {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${import.meta.env.VITE_GROQ_API_KEY}`},
-    body: JSON.stringify({
-      model, max_tokens:600,
-      messages:[{role:"system",content:`You are a SQL expert writing queries for AlaSQL (an in-browser SQL engine with limitations).
+async function askLLM(question, model, retryCount = 0) {
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${import.meta.env.VITE_GROQ_API_KEY}`},
+      body: JSON.stringify({
+        model, max_tokens:600,
+        messages:[{role:"system",content:`You are a SQL expert writing queries for AlaSQL (an in-browser SQL engine with limitations).
 
 SCHEMA:
 ${SCHEMA}
@@ -251,20 +251,29 @@ RULES:
 - answer: state the key finding with actual numbers (e.g. "Product X generated $108,500...")
 - insight: give a business action (e.g. "Consider expanding...")
 - If ambiguous, make the most useful interpretation`},{role:"user", content:question}],
-    }),
-  });
-  const data = await res.json();
-  const raw = (data.choices?.[0]?.message?.content || "{}").replace(/```json|```/g,"").trim();
-  const parsed = JSON.parse(raw);
-  return {
-    sql: parsed.sql,
-    intent: parsed.intent,
-    answer: parsed.answer || "",
-    insight: parsed.insight || "",
-    followups: Array.isArray(parsed.followups) ? parsed.followups : [],
-    inputTokens: data.usage?.prompt_tokens || 0,
-    outputTokens: data.usage?.completion_tokens || 0,
-  };
+      }),
+    });
+    const data = await res.json();
+    const raw = (data.choices?.[0]?.message?.content || "{}").replace(/```json|```/g,"").trim();
+    const parsed = JSON.parse(raw);
+    return {
+      sql: parsed.sql,
+      intent: parsed.intent,
+      answer: parsed.answer || "",
+      insight: parsed.insight || "",
+      followups: Array.isArray(parsed.followups) ? parsed.followups : [],
+      inputTokens: data.usage?.prompt_tokens || 0,
+      outputTokens: data.usage?.completion_tokens || 0,
+    };
+  } catch(e) {
+    // Retry up to 2 times for JSON parsing errors or API failures
+    if (retryCount < 2 && (e.message.includes('JSON') || e.message.includes('fetch'))) {
+      console.warn(`LLM call failed (attempt ${retryCount + 1}), retrying:`, e.message);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      return askLLM(question, model, retryCount + 1);
+    }
+    throw e;
+  }
 }
 
 // ─── SUGGESTIONS ─────────────────────────────────────────────────────────────
